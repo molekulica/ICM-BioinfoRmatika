@@ -1,3 +1,9 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
 install.packages("rmarkdown")
 source("http://bioconductor.org/biocLite.R")
 biocLite("GenomicRanges")
@@ -11,3 +17,6 @@ install.packages("dplyr") ## optional
 require(GenomicRanges)
 require(Biostrings)
 require(dplyr)
+
+```
+
