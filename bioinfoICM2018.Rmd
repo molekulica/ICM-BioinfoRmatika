@@ -1,0 +1,119 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Position weight matrix taken from:
+
+http://2013.igem.org/Team:XMU_Software/Project/promoter
+
+Učitavanje genoma E. coli:
+
+```{r}
+library(Biostrings)
+
+eColi <- readDNAStringSet("NC_000913.3.fasta")[[1]]
+
+```
+
+
+Učitavanje matrica motiva:
+
+```{r}
+
+tataat <- read.table("TATAAT.csv", row.names = 1)
+ttgaca <- read.table("TTGACA.csv", row.names = 1)
+
+tataatPWM <- PWM(as.matrix(tataat[-c(1, 2)]))
+ttgacaPWM <- PWM(as.matrix(ttgaca[-c(1, 2, 3)]))
+
+```
+
+
+
+Pronalaženje pozicija motiva u genomu:
+minscore je parametar čije mijenjanje utječe na osjetljivost traženja motiva
+
+```{r}
+minscore <- "80%"
+
+tataatPos <- matchPWM(tataatPWM, eColi, min.score = minscore)
+ttgacaPos <- matchPWM(ttgacaPWM, eColi, min.score = minscore)
+
+```
+
+
+Traženje pozicija na kojima je motiv TTGACA uzvodno od TATAAT, s razmakom 13 do 19 nukleotida:
+
+query = tataat
+subject = ttgaca
+
+Objašnjenje:
+adjacentMotives[passFilter] : uzima samo preklapanja koja su prošla filter (da je razmak među motivima barem 13 nt)
+
+subjectHits(gore navedeno)
+queryHits(gore navedeno)
+
+: ove dvije komande nam daju indeks motiva koji su prošli filter u varijablama tataatPos i ttgacaPos :
+
+ttgacaPos[gore navedeno] : izvlači genomske pozicije traženih motiva
+
+start(gore navedeno) : daje početnu koordinatu
+end(gore navedeno) : daje završnu koordinatu
+
+Uzevši start motiva ttgaca i end motiva tataat, dobivamo poziciju promotora (veznog mjesta sigma 70)
+
+
+```{r}
+adjacentMotives <- findOverlaps(tataatPos, ttgacaPos, maxgap = 19, minoverlap = 0)
+
+tataStart <- start(tataatPos[queryHits(adjacentMotives)])
+ttgaEnd <- end(ttgacaPos[subjectHits(adjacentMotives)])
+
+passFilter <- tataStart - ttgaEnd >= 13
+
+promotorPos <- IRanges(
+  start = start(ttgacaPos[subjectHits(adjacentMotives[passFilter])]),
+  end = end(tataatPos[queryHits(adjacentMotives[passFilter])]) )
+
+```
+
+Usporedba s anotacijom gena: učitavanje anotacije  gff3 formatu
+
+
+```{r}
+annotation <- read.table("sequence.gff3", comment.char = "#", sep = "\t", quote = "", stringsAsFactors = F)
+```
+
+
+Uzimamo samo gene sa + "stranda", te nas za njih zanimaju samo početna i završna koordinata
+
+```{r}
+library(dplyr)
+genestart <- filter(annotation, V7 == "+" & V3 == "gene") %>% select(c("V4", "V5"))
+genePos <- IRanges(start = genestart[[1]], end = genestart[[2]])
+```
+
+
+Pokušavao saznati koliko od identificiranih promotora se nalazi uzvodno od gena (ali u njihovoj blizini):
+
+findOverlaps:
+  maxgap - dopuštamo razmak između gena i promotora max 20 nt
+  minoverlap - tražimo preklapanje u najmanje 0 nt
+  
+pass2 : filtriramo promotore koji su za barem 9 nt udaljeni od gena, i nizvodno od njih
+
+```{r}
+geneOverlaps <- findOverlaps(promotorPos, genePos, maxgap = 20, minoverlap = 0)
+
+promEnd <- end(promotorPos[queryHits(geneOverlaps)])
+filteredGeneStart <- start(genePos[subjectHits(geneOverlaps)])
+
+pass2 <- filteredGeneStart - promEnd >= 9
+sum(pass2)
+length(promotorPos)
+dim(genestart)
+```
+
+
+
